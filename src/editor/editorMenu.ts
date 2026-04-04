@@ -593,6 +593,11 @@ function buildImageMenu(menu: Menu, plugin: SidekickPlugin, file: TFile): void {
 				.setIcon('replace')
 				.onClick(() => void extractAndReplace(plugin, file)),
 		);
+		submenu.addItem((si) =>
+			si.setTitle('Convert to mermaid diagram below')
+				.setIcon('git-fork')
+				.onClick(() => void convertToMermaidBelow(plugin, file)),
+		);
 	});
 }
 
@@ -727,6 +732,59 @@ async function extractAndReplace(plugin: SidekickPlugin, file: TFile): Promise<v
 		});
 		notice.hide();
 		new Notice('Sidekick: image replaced with extracted content.');
+	} catch (e) {
+		notice.hide();
+		new Notice(`Sidekick: error — ${String(e)}`);
+	}
+}
+
+/** Convert an image to a Mermaid diagram and insert it below the embed in the active note. */
+async function convertToMermaidBelow(plugin: SidekickPlugin, file: TFile): Promise<void> {
+	const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+	if (!activeView) {
+		new Notice('Sidekick: open a note that contains this image first.');
+		return;
+	}
+	const cmView: EditorView | undefined = (activeView as unknown as {editor?: {cm?: EditorView}}).editor?.cm;
+	if (!cmView) return;
+
+	const embed = findImageEmbed(cmView, file);
+	if (!embed) {
+		new Notice(`Sidekick: could not find a reference to "${file.name}" in the active note.`);
+		return;
+	}
+
+	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
+
+	const absPath = getAbsolutePath(plugin, file);
+	const notice = new Notice('Sidekick: converting image to Mermaid diagram…', 0);
+	try {
+		const {content: result, sessionId} = await plugin.copilot.inlineChat({
+			prompt:
+				`Analyze this image and convert it into a Mermaid diagram. ` +
+				`Choose the most appropriate diagram type (e.g. flowchart, sequenceDiagram, classDiagram, erDiagram, gantt, mindmap, etc.) ` +
+				`that best represents the content of the image. ` +
+				`Return only the Mermaid code block, with no additional explanation.`,
+			model: plugin.settings.inlineModel || undefined,
+			systemMessage:
+				'You are an expert at converting visual diagrams and charts into Mermaid diagram syntax. ' +
+				'Analyze the provided image and return a single Mermaid code block (wrapped in ```mermaid ... ```) ' +
+				'that faithfully represents the structure shown. Do not include any introductory text or explanation.',
+			attachments: [{type: 'file', path: absPath, displayName: file.name}],
+		});
+		registerInlineSession(plugin, sessionId, `Mermaid ${file.name}`);
+
+		const mermaid = result?.trim() ?? null;
+		if (!mermaid) { notice.hide(); new Notice('Sidekick: no diagram generated.'); return; }
+
+		// Insert after the embed line
+		const line = cmView.state.doc.lineAt(embed.to);
+		const insertPos = line.to;
+		cmView.dispatch({
+			changes: {from: insertPos, insert: '\n\n' + mermaid},
+		});
+		notice.hide();
+		new Notice('Sidekick: Mermaid diagram inserted.');
 	} catch (e) {
 		notice.hide();
 		new Notice(`Sidekick: error — ${String(e)}`);

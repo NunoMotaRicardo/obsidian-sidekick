@@ -602,7 +602,7 @@ Right-click a file or folder in the vault explorer → **Sidekick**.
 
 **Folders:** New note (AI-generated), New summary note (summarizes all notes in the folder), Chat with sidekick.
 
-**Images:** Insert extracted content below, or Replace with extracted content — uses AI to pull text from images.
+**Images:** Insert extracted content below, Replace with extracted content, or Convert to mermaid diagram below — uses AI to pull text from images or generate a Mermaid diagram representing the image.
 
 ---
 
