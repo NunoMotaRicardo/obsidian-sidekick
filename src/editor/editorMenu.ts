@@ -774,8 +774,24 @@ async function convertToMermaidBelow(plugin: SidekickPlugin, file: TFile): Promi
 		});
 		registerInlineSession(plugin, sessionId, `Mermaid ${file.name}`);
 
-		const mermaid = result?.trim() ?? null;
-		if (!mermaid) { notice.hide(); new Notice('Sidekick: no diagram generated.'); return; }
+		const raw = result?.trim() ?? null;
+		if (!raw) { notice.hide(); new Notice('Sidekick: no diagram generated.'); return; }
+
+		// Extract the first ```mermaid fenced block, or wrap bare Mermaid content in a fence
+		const fenceMatch = /```mermaid\b[\s\S]*?```/i.exec(raw);
+		let mermaid: string;
+		if (fenceMatch) {
+			mermaid = fenceMatch[0];
+		} else {
+			// No fence found — check if it looks like raw Mermaid syntax and wrap it
+			const looksLikeMermaid = /^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap|timeline|gitGraph|block-beta|xychart-beta)\b/im.test(raw);
+			if (!looksLikeMermaid) {
+				notice.hide();
+				new Notice('Sidekick: could not find a valid Mermaid diagram in the response.');
+				return;
+			}
+			mermaid = '```mermaid\n' + raw + '\n```';
+		}
 
 		// Insert after the embed line
 		const line = cmView.state.doc.lineAt(embed.to);
