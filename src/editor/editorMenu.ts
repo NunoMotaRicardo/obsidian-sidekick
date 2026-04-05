@@ -671,33 +671,48 @@ function escapeRegex(s: string): string {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Extract image content and insert it below the embed in the active note. */
-async function extractAndInsertBelow(plugin: SidekickPlugin, file: TFile): Promise<void> {
+/**
+ * Resolve the active EditorView and the embed range for `file`.
+ * Returns `null` and shows an appropriate Notice when either is unavailable.
+ */
+function getActiveEditorAndEmbed(
+	plugin: SidekickPlugin,
+	file: TFile,
+): {cmView: EditorView; embed: {from: number; to: number}} | null {
 	const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
 	if (!activeView) {
 		new Notice('Sidekick: open a note that contains this image first.');
-		return;
+		return null;
 	}
 	const cmView: EditorView | undefined = (activeView as unknown as {editor?: {cm?: EditorView}}).editor?.cm;
-	if (!cmView) return;
+	if (!cmView) return null;
 
 	const embed = findImageEmbed(cmView, file);
 	if (!embed) {
 		new Notice(`Sidekick: could not find a reference to "${file.name}" in the active note.`);
-		return;
+		return null;
 	}
+	return {cmView, embed};
+}
+
+/** Insert `text` on a new paragraph after the line that contains `embed`. */
+function insertBelowEmbed(cmView: EditorView, embed: {from: number; to: number}, text: string): void {
+	const line = cmView.state.doc.lineAt(embed.to);
+	cmView.dispatch({changes: {from: line.to, insert: '\n\n' + text}});
+}
+
+/** Extract image content and insert it below the embed in the active note. */
+async function extractAndInsertBelow(plugin: SidekickPlugin, file: TFile): Promise<void> {
+	const ctx = getActiveEditorAndEmbed(plugin, file);
+	if (!ctx) return;
+	const {cmView, embed} = ctx;
 
 	const notice = new Notice('Sidekick: extracting image content…', 0);
 	try {
 		const content = await extractImageContent(plugin, file);
 		if (!content) { notice.hide(); new Notice('Sidekick: no content extracted.'); return; }
 
-		// Insert after the embed line
-		const line = cmView.state.doc.lineAt(embed.to);
-		const insertPos = line.to;
-		cmView.dispatch({
-			changes: {from: insertPos, insert: '\n\n' + content},
-		});
+		insertBelowEmbed(cmView, embed, content);
 		notice.hide();
 		new Notice('Sidekick: extracted content inserted.');
 	} catch (e) {
@@ -708,19 +723,9 @@ async function extractAndInsertBelow(plugin: SidekickPlugin, file: TFile): Promi
 
 /** Extract image content and replace the embed in the active note. */
 async function extractAndReplace(plugin: SidekickPlugin, file: TFile): Promise<void> {
-	const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
-	if (!activeView) {
-		new Notice('Sidekick: open a note that contains this image first.');
-		return;
-	}
-	const cmView: EditorView | undefined = (activeView as unknown as {editor?: {cm?: EditorView}}).editor?.cm;
-	if (!cmView) return;
-
-	const embed = findImageEmbed(cmView, file);
-	if (!embed) {
-		new Notice(`Sidekick: could not find a reference to "${file.name}" in the active note.`);
-		return;
-	}
+	const ctx = getActiveEditorAndEmbed(plugin, file);
+	if (!ctx) return;
+	const {cmView, embed} = ctx;
 
 	const notice = new Notice('Sidekick: extracting image content…', 0);
 	try {
@@ -740,19 +745,9 @@ async function extractAndReplace(plugin: SidekickPlugin, file: TFile): Promise<v
 
 /** Convert an image to a Mermaid diagram and insert it below the embed in the active note. */
 async function convertToMermaidBelow(plugin: SidekickPlugin, file: TFile): Promise<void> {
-	const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
-	if (!activeView) {
-		new Notice('Sidekick: open a note that contains this image first.');
-		return;
-	}
-	const cmView: EditorView | undefined = (activeView as unknown as {editor?: {cm?: EditorView}}).editor?.cm;
-	if (!cmView) return;
-
-	const embed = findImageEmbed(cmView, file);
-	if (!embed) {
-		new Notice(`Sidekick: could not find a reference to "${file.name}" in the active note.`);
-		return;
-	}
+	const ctx = getActiveEditorAndEmbed(plugin, file);
+	if (!ctx) return;
+	const {cmView, embed} = ctx;
 
 	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
 
@@ -793,12 +788,7 @@ async function convertToMermaidBelow(plugin: SidekickPlugin, file: TFile): Promi
 			mermaid = '```mermaid\n' + raw + '\n```';
 		}
 
-		// Insert after the embed line
-		const line = cmView.state.doc.lineAt(embed.to);
-		const insertPos = line.to;
-		cmView.dispatch({
-			changes: {from: insertPos, insert: '\n\n' + mermaid},
-		});
+		insertBelowEmbed(cmView, embed, mermaid);
 		notice.hide();
 		new Notice('Sidekick: Mermaid diagram inserted.');
 	} catch (e) {
