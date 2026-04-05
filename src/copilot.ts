@@ -266,6 +266,8 @@ export class CopilotService {
 		model?: string;
 		systemMessage?: string;
 		customAgents?: CustomAgentConfig[];
+		skillDirectories?: string[];
+		disabledSkills?: string[];
 		onPermissionRequest?: PermissionHandler;
 		onUserInputRequest?: UserInputHandler;
 		attachments?: MessageOptions['attachments'];
@@ -275,6 +277,8 @@ export class CopilotService {
 			onPermissionRequest: options.onPermissionRequest ?? approveAll,
 			...(options.onUserInputRequest ? {onUserInputRequest: options.onUserInputRequest} : {}),
 			customAgents: options.customAgents,
+			...(options.skillDirectories && options.skillDirectories.length > 0 ? {skillDirectories: options.skillDirectories} : {}),
+			...(options.disabledSkills && options.disabledSkills.length > 0 ? {disabledSkills: options.disabledSkills} : {}),
 			...(options.systemMessage
 				? {systemMessage: {content: options.systemMessage}}
 				: {}),

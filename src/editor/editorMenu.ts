@@ -3,6 +3,8 @@ import type {EditorView} from '@codemirror/view';
 import type SidekickPlugin from '../main';
 import {approveAll} from '../copilot';
 import type {PermissionRequest, PermissionRequestResult, UserInputRequest, UserInputResponse} from '../copilot';
+import {loadSkills} from '../configLoader';
+import {getSkillsFolder} from '../settings';
 import {setFetching, triggerComplete} from './ghostText';
 import {SIDEKICK_VIEW_TYPE, SidekickView} from '../sidekickView';
 import {EditModal} from '../modals/editModal';
@@ -607,6 +609,29 @@ function getAbsolutePath(plugin: SidekickPlugin, file: TFile): string {
 	return basePath + '/' + file.path;
 }
 
+async function getInlineSkillOptions(
+	plugin: SidekickPlugin,
+	enabledSkillNames: string[],
+): Promise<{skillDirectories?: string[]; disabledSkills?: string[]}> {
+	const skillsFolder = getSkillsFolder(plugin.settings);
+	const availableSkills = await loadSkills(plugin.app, skillsFolder);
+	if (availableSkills.length === 0) return {};
+
+	const enabled = new Set(enabledSkillNames.map(name => name.toLowerCase()));
+	const matchingSkills = availableSkills.filter(skill => enabled.has(skill.name.toLowerCase()));
+	if (matchingSkills.length === 0) return {};
+
+	const basePath = (plugin.app.vault.adapter as unknown as {basePath: string}).basePath;
+	const disabledSkills = availableSkills
+		.filter(skill => !enabled.has(skill.name.toLowerCase()))
+		.map(skill => skill.name);
+
+	return {
+		skillDirectories: [basePath + '/' + skillsFolder],
+		...(disabledSkills.length > 0 ? {disabledSkills} : {}),
+	};
+}
+
 /** Extract content from an image by sending it to the LLM. */
 async function extractImageContent(plugin: SidekickPlugin, file: TFile): Promise<string | null> {
 	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return null; }
@@ -752,19 +777,23 @@ async function convertToMermaidBelow(plugin: SidekickPlugin, file: TFile): Promi
 	if (!plugin.copilot) { new Notice('Copilot is not configured.'); return; }
 
 	const absPath = getAbsolutePath(plugin, file);
+	const mermaidSkillOptions = await getInlineSkillOptions(plugin, ['mermaid']);
 	const notice = new Notice('Sidekick: converting image to Mermaid diagram…', 0);
 	try {
 		const {content: result, sessionId} = await plugin.copilot.inlineChat({
 			prompt:
 				`Analyze this image and convert it into a Mermaid diagram. ` +
+				`Use the mermaid skill available in the vault to produce valid Mermaid syntax. ` +
 				`Choose the most appropriate diagram type (e.g. flowchart, sequenceDiagram, classDiagram, erDiagram, gantt, mindmap, etc.) ` +
 				`that best represents the content of the image. ` +
 				`Return only the Mermaid code block, with no additional explanation.`,
 			model: plugin.settings.inlineModel || undefined,
 			systemMessage:
-				'You are an expert at converting visual diagrams and charts into Mermaid diagram syntax. ' +
+				'You are an expert at converting visual diagrams and charts into Mermaid diagram syntax. Use <br> to break lines instead of \\n for obsidian compatibility. ' +
+				'Use the mermaid skill from the vault when available to validate and improve the diagram output. ' +
 				'Analyze the provided image and return a single Mermaid code block (wrapped in ```mermaid ... ```) ' +
 				'that faithfully represents the structure shown. Do not include any introductory text or explanation.',
+			...mermaidSkillOptions,
 			attachments: [{type: 'file', path: absPath, displayName: file.name}],
 		});
 		registerInlineSession(plugin, sessionId, `Mermaid ${file.name}`);
