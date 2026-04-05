@@ -24,7 +24,6 @@ declare module '../sidekickView' {
 		updateFilterBadge(): void;
 		openSessionSortMenu(e: MouseEvent): void;
 		updateSortBadge(): void;
-		registerInlineSession(sessionId: string, description: string): void;
 		saveCurrentToBackground(): void;
 		restoreFromBackground(bg: BackgroundSession): Promise<void>;
 		registerBackgroundEvents(bg: BackgroundSession): void;
@@ -36,7 +35,6 @@ declare module '../sidekickView' {
 		confirmDeleteDisplayedSessions(): void;
 		getDisplayedSessions(): SessionMetadata[];
 		deleteDisplayedSessions(sessions: SessionMetadata[]): Promise<void>;
-		saveSessionNames(): void;
 	}
 }
 
@@ -354,23 +352,6 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 	proto.updateSortBadge = function (): void {
 		const labels: Record<string, string> = {modified: 'Modified', created: 'Created', name: 'Name'};
 		this.sidebarSortEl.setAttribute('title', `Sort: ${labels[this.sessionSort]}`);
-	};
-
-	proto.registerInlineSession = function (sessionId: string, description: string): void {
-		this.sessionNames[sessionId] = `[inline] ${description}`;
-		this.saveSessionNames();
-
-		// Add to session list immediately so sidebar updates
-		if (!this.sessionList.some(s => s.sessionId === sessionId)) {
-			const now = new Date();
-			this.sessionList.unshift({
-				sessionId,
-				startTime: now,
-				modifiedTime: now,
-				isRemote: false,
-			} as SessionMetadata);
-		}
-		this.renderSessionList();
 	};
 
 	proto.saveCurrentToBackground = function (): void {
@@ -849,8 +830,4 @@ export function installSessionSidebar(ViewClass: {prototype: unknown}): void {
 		new Notice(`Deleted ${deleted} session${deleted === 1 ? '' : 's'}.`);
 	};
 
-	proto.saveSessionNames = function (): void {
-		this.plugin.settings.sessionNames = {...this.sessionNames};
-		void this.plugin.saveSettings();
-	};
 }

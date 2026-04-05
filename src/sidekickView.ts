@@ -179,6 +179,30 @@ export class SidekickView extends ItemView {
 		return 'brain';
 	}
 
+	saveSessionNames(): void {
+		this.plugin.settings.sessionNames = {...this.sessionNames};
+		void this.plugin.saveSettings();
+	}
+
+	registerInlineSession(sessionId: string, description: string): void {
+		this.sessionNames[sessionId] = `[inline] ${description}`;
+		this.saveSessionNames();
+
+		if (!this.sessionList.some(s => s.sessionId === sessionId)) {
+			const now = new Date();
+			this.sessionList.unshift({
+				sessionId,
+				startTime: now,
+				modifiedTime: now,
+				isRemote: false,
+			} as import('./copilot').SessionMetadata);
+		}
+
+		if (this.sidebarListEl) {
+			this.renderSessionList();
+		}
+	}
+
 	// ── Lifecycle ────────────────────────────────────────────────
 
 	async onOpen(): Promise<void> {

@@ -520,9 +520,16 @@ export class EditModal extends Modal {
 
 		// Register as inline session so the sidebar filter can distinguish it
 		const editDesc = this.editPrompt.trim() || 'Edit';
+		this.plugin.settings.sessionNames ??= {};
+		this.plugin.settings.sessionNames[sessionId] = `[inline] Edit: ${editDesc.slice(0, 30)}`;
+		void this.plugin.saveSettings();
+
 		const leaves = this.plugin.app.workspace.getLeavesOfType(SIDEKICK_VIEW_TYPE);
 		if (leaves.length > 0 && leaves[0]) {
-			(leaves[0].view as SidekickView).registerInlineSession(sessionId, `Edit: ${editDesc.slice(0, 30)}`);
+			const view = leaves[0].view as SidekickView;
+			if (typeof view.registerInlineSession === 'function') {
+				view.registerInlineSession(sessionId, `Edit: ${editDesc.slice(0, 30)}`);
+			}
 		}
 
 		if (!result) throw new Error('No response received.');

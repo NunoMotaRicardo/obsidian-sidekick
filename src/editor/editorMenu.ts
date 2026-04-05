@@ -930,10 +930,16 @@ async function applyStructure(plugin: SidekickPlugin, view: EditorView, template
  * filter can distinguish inline sessions from chat sessions.
  */
 function registerInlineSession(plugin: SidekickPlugin, sessionId: string, description: string): void {
+	plugin.settings.sessionNames ??= {};
+	plugin.settings.sessionNames[sessionId] = `[inline] ${description}`;
+	void plugin.saveSettings();
+
 	const leaves = plugin.app.workspace.getLeavesOfType(SIDEKICK_VIEW_TYPE);
 	if (leaves.length > 0 && leaves[0]) {
 		const view = leaves[0].view as SidekickView;
-		view.registerInlineSession(sessionId, description);
+		if (typeof view.registerInlineSession === 'function') {
+			view.registerInlineSession(sessionId, description);
+		}
 	}
 }
 
